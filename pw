@@ -1,0 +1,153 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+###############################################################################
+# Palworld Wine (Minimal) + UE4SS + PalDefender + PalSchema
+#
+# 기준: 제공한 B(wine) 스크립트의 디렉토리 구조/흐름을 유지하되 "미니멀"로 정리
+# - 타임존/패키지 업데이트/도커 설치: 하지 않음(이미 완료 전제)
+# - palbungi raw -> HJunMin/palworld_wine raw 사용
+# - PalSchema: 0.5.2
+# - PalDefender: 통합본 PalDefender.zip (선택 설치)
+# - 심볼릭 링크 생성: 없음
+# - default.env 수동 편집(nano): 없음
+# - docker-compose up -d: 주석 처리(추후 수동 실행)
+# - Portainer/설치파일 삭제/화려한 출력: 없음
+###############################################################################
+
+# -----------------------------------------------------------------------------
+# 사용자/경로 설정 (B 스크립트 구조 유지)
+# -----------------------------------------------------------------------------
+USER_NAME="$(whoami)"
+USER_HOME="/home/${USER_NAME}"
+
+SERVER_DIR="${USER_HOME}/palworld-wine"
+GAME_DIR="${SERVER_DIR}/game"
+CONFIG_DIR="${GAME_DIR}/Pal/Saved/Config/WindowsServer"
+SAVE_DIR="${GAME_DIR}/Pal/Saved/SaveGames/0/0123456789ABCDEF0123456789ABCDEF"
+BINARIES_DIR="${GAME_DIR}/Pal/Binaries/Win64"
+MODS_DIR="${BINARIES_DIR}/ue4ss/Mods"
+LOGIC_MODS_DIR="${GAME_DIR}/Pal/Content/Paks/LogicMods"
+
+# HJunMin 레포(raw)
+RAW_BASE="https://raw.githubusercontent.com/HJunMin/palworld_wine/main"
+
+# -----------------------------------------------------------------------------
+# 1) 서버 디렉토리 생성 및 이동
+# -----------------------------------------------------------------------------
+mkdir -p "${SERVER_DIR}"
+cd "${SERVER_DIR}"
+
+# -----------------------------------------------------------------------------
+# 2) docker-compose.yml 및 default.env 다운로드 + PUBLIC_IP 주입
+# -----------------------------------------------------------------------------
+wget -q "${RAW_BASE}/docker-compose.yml" -O "${SERVER_DIR}/docker-compose.yml"
+wget -q "${RAW_BASE}/default.env"        -O "${SERVER_DIR}/default.env"
+
+PUBLIC_IP="$(curl -fsSL ifconfig.me || true)"
+if [[ -n "${PUBLIC_IP}" ]]; then
+  sed -i "s/^PUBLIC_IP=.*/PUBLIC_IP=${PUBLIC_IP}/" "${SERVER_DIR}/default.env"
+fi
+
+# -----------------------------------------------------------------------------
+# 3) 관리 스크립트 다운로드 (B 기준: 홈에 배치)
+# -----------------------------------------------------------------------------
+scripts=(
+  "regular_maintenance.sh"
+  "start.sh"
+  "restart.sh"
+  "stop.sh"
+  "timer.sh"
+)
+
+for s in "${scripts[@]}"; do
+  wget -q "${RAW_BASE}/${s}" -O "${USER_HOME}/${s}"
+  chmod +x "${USER_HOME}/${s}"
+  sed -i "s/YOUR_USERNAME/${USER_NAME}/g" "${USER_HOME}/${s}" || true
+done
+
+# B 스크립트의 경로 치환 유지 (필요 시)
+# regular_maintenance.sh 내부에서 palworld-wine/regular_maintenance.sh 같은 경로를 기대하는 경우가 있어 치환
+sed -i "s|palworld-wine/regular_maintenance.sh|${USER_HOME}/regular_maintenance.sh|g" \
+  "${USER_HOME}/regular_maintenance.sh" || true
+
+# -----------------------------------------------------------------------------
+# 4) 게임 디렉토리 구조 생성 + 설정 파일 다운로드
+# -----------------------------------------------------------------------------
+mkdir -p "${CONFIG_DIR}" "${SAVE_DIR}" "${BINARIES_DIR}" "${LOGIC_MODS_DIR}"
+
+wget -q "${RAW_BASE}/Engine.ini"          -O "${CONFIG_DIR}/Engine.ini"
+wget -q "${RAW_BASE}/GameUserSettings.ini" -O "${CONFIG_DIR}/GameUserSettings.ini"
+
+# -----------------------------------------------------------------------------
+# 5) UE4SS 설치
+# -----------------------------------------------------------------------------
+# unzip이 없으면 설치(최소 의존성)
+if ! command -v unzip >/dev/null 2>&1; then
+  sudo apt-get update
+  sudo apt-get install -y unzip
+fi
+
+UE4SS_ZIP="${SERVER_DIR}/UE4SS-Palworld.zip"
+wget -q "https://github.com/Okaetsu/RE-UE4SS/releases/download/experimental-palworld/UE4SS-Palworld.zip" -O "${UE4SS_ZIP}"
+unzip -q "${UE4SS_ZIP}" -d "${BINARIES_DIR}"
+rm -f "${UE4SS_ZIP}"
+rm -rf "${BINARIES_DIR}/UE4SS-Palworld" 2>/dev/null || true
+
+# -----------------------------------------------------------------------------
+# 6) PalSchema 설치 (0.5.2)
+# -----------------------------------------------------------------------------
+PALSCHEMA_VER="0.5.2"
+PALSCHEMA_ZIP="${SERVER_DIR}/PalSchema_${PALSCHEMA_VER}.zip"
+mkdir -p "${MODS_DIR}"
+
+wget -q "https://github.com/Okaetsu/PalSchema/releases/download/${PALSCHEMA_VER}/PalSchema_${PALSCHEMA_VER}.zip" -O "${PALSCHEMA_ZIP}"
+unzip -q "${PALSCHEMA_ZIP}" -d "${MODS_DIR}"
+rm -f "${PALSCHEMA_ZIP}"
+
+# -----------------------------------------------------------------------------
+# 7) PalDefender 설치 (선택) - 통합본 PalDefender.zip
+# -----------------------------------------------------------------------------
+INSTALL_DEFENDER="${INSTALL_DEFENDER:-}"  # 환경변수로도 제어 가능 (y/N)
+if [[ -z "${INSTALL_DEFENDER}" ]]; then
+  read -r -p "PalDefender를 설치하시겠습니까? [y/N] " INSTALL_DEFENDER
+fi
+
+if [[ "${INSTALL_DEFENDER}" =~ ^[Yy]$ ]]; then
+  PALDEF_ZIP="${SERVER_DIR}/PalDefender.zip"
+  wget -q "https://github.com/Ultimeit/PalDefender/releases/latest/download/PalDefender.zip" -O "${PALDEF_ZIP}"
+  unzip -q "${PALDEF_ZIP}" -d "${BINARIES_DIR}"
+  rm -f "${PALDEF_ZIP}"
+
+  # Config.json 배치 + 운영자 IP 치환
+  mkdir -p "${BINARIES_DIR}/PalDefender"
+  wget -q "${RAW_BASE}/Config.json" -O "${BINARIES_DIR}/PalDefender/Config.json"
+
+  USER_IP="$(who | awk '{print $5}' | tr -d '()' | head -1 || true)"
+  if [[ -n "${USER_IP}" ]]; then
+    sed -i "s|127.0.0.1|${USER_IP}|g" "${BINARIES_DIR}/PalDefender/Config.json"
+  fi
+
+  # 운영자 스크립트
+  wget -q "${RAW_BASE}/admin.sh" -O "${USER_HOME}/admin.sh"
+  chmod +x "${USER_HOME}/admin.sh"
+else
+  # 설치 안 하면 흔적 제거(이미 존재할 수 있으므로)
+  rm -rf "${BINARIES_DIR}/PalDefender" "${USER_HOME}/admin.sh" 2>/dev/null || true
+fi
+
+# -----------------------------------------------------------------------------
+# 8) 정기 재시작(cron) 등록 (B 흐름 유지)
+# -----------------------------------------------------------------------------
+bash "${USER_HOME}/timer.sh" || true
+sudo systemctl restart cron || true
+sudo systemctl enable cron || true
+
+# -----------------------------------------------------------------------------
+# 9) 서버 기동(추후 수동) - 주석 처리
+# -----------------------------------------------------------------------------
+# docker-compose -f "${SERVER_DIR}/docker-compose.yml" up -d
+
+echo "Done."
+echo "Server dir: ${SERVER_DIR}"
+echo "To start later: docker-compose -f ${SERVER_DIR}/docker-compose.yml up -d"
