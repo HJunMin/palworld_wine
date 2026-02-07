@@ -79,31 +79,7 @@ mkdir -p "${CONFIG_DIR}" "${SAVE_DIR}" "${BINARIES_DIR}" "${LOGIC_MODS_DIR}"
 wget -q "${RAW_BASE}/Engine.ini"          -O "${CONFIG_DIR}/Engine.ini"
 wget -q "${RAW_BASE}/GameUserSettings.ini" -O "${CONFIG_DIR}/GameUserSettings.ini"
 
-# -----------------------------------------------------------------------------
-# 5) UE4SS 설치
-# -----------------------------------------------------------------------------
-# unzip이 없으면 설치(최소 의존성)
-if ! command -v unzip >/dev/null 2>&1; then
-  sudo apt-get update
-  sudo apt-get install -y unzip
-fi
 
-UE4SS_ZIP="${SERVER_DIR}/UE4SS-Palworld.zip"
-wget -q "https://github.com/Okaetsu/RE-UE4SS/releases/download/experimental-palworld/UE4SS-Palworld.zip" -O "${UE4SS_ZIP}"
-unzip -q "${UE4SS_ZIP}" -d "${BINARIES_DIR}"
-rm -f "${UE4SS_ZIP}"
-rm -rf "${BINARIES_DIR}/UE4SS-Palworld" 2>/dev/null || true
-
-# -----------------------------------------------------------------------------
-# 6) PalSchema 설치 (0.5.2)
-# -----------------------------------------------------------------------------
-PALSCHEMA_VER="0.5.2"
-PALSCHEMA_ZIP="${SERVER_DIR}/PalSchema_${PALSCHEMA_VER}.zip"
-mkdir -p "${MODS_DIR}"
-
-wget -q "https://github.com/Okaetsu/PalSchema/releases/download/${PALSCHEMA_VER}/PalSchema_${PALSCHEMA_VER}.zip" -O "${PALSCHEMA_ZIP}"
-unzip -q "${PALSCHEMA_ZIP}" -d "${MODS_DIR}"
-rm -f "${PALSCHEMA_ZIP}"
 
 # -----------------------------------------------------------------------------
 # 7) PalDefender 설치 (선택) - 통합본 PalDefender.zip
