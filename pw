@@ -95,6 +95,15 @@ if [[ "${INSTALL_DEFENDER}" =~ ^[Yy]$ ]]; then
   unzip -q "${PALDEF_ZIP}" -d "${BINARIES_DIR}"
   rm -f "${PALDEF_ZIP}"
 
+  # Config.json 배치 + 운영자 IP 치환
+  mkdir -p "${BINARIES_DIR}/PalDefender"
+  wget -q "${RAW_BASE}/Config.json" -O "${BINARIES_DIR}/PalDefender/Config.json"
+
+  USER_IP="$(who | awk '{print $5}' | tr -d '()' | head -1 || true)"
+  if [[ -n "${USER_IP}" ]]; then
+    sed -i "s|127.0.0.1|${USER_IP}|g" "${BINARIES_DIR}/PalDefender/Config.json"
+  fi
+
   # 운영자 스크립트
   wget -q "${RAW_BASE}/admin.sh" -O "${USER_HOME}/admin.sh"
   chmod +x "${USER_HOME}/admin.sh"
