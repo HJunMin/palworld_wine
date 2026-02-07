@@ -28,7 +28,7 @@ services:
         published: 27015 # Query port on your host
         protocol: tcp      
       - target: 17993 # Query port inside of the container
-        published: 27015 # Query port on your host
+        published: 17993  # Query port on your host
         protocol: tcp
     env_file:
       - ./default.env
